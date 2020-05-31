@@ -1,36 +1,29 @@
 %The function returns angleList and speedList
-% divisions - 
-% windowSize - the size of
-function[angleList, averageSpeedList] = AverageValueForAngle(smoothingEventsMatrix, time, timeThreshold, divisions, windowSize)
-    if nargin == 3
-        divisions = 6;
+% smoothingEventsMatrix - matrgix that had been calculated in main2.m
+% time  - value forrm 0 to 1500
+% timeDifferenceThreshold - value that is used for filtering by difference between neigbours pixels
+% timeThreshold - value that is used for filtering by time value
+% divisions -  units in a circle
+% windowSize - the value contain size of sliding window that is used for speed calculations.
+% 
+function[angleList, averageSpeedList] = AverageValueForAngle(smoothingEventsMatrix, time, timeDifferenceThreshold, timeThreshold, windowSize)
+    if (time == -1) 
+        [sumMap, countsMap] = internalAverageValue(smoothingEventsMatrix, timeDifferenceThreshold, timeThreshold, windowSize);
+    else
+        [sumMap, countsMap] = internalAverageValue(smoothingEventsMatrix(:,:,time), timeDifferenceThreshold, timeThreshold, windowSize);
     end
-    angleList = angleArray(divisions);
     
-    [sumArr, countsArr] = internalAverageValue(smoothingEventsMatrix, time, timeThreshold, angleList, windowSize)
-    angles = formatAngle(angleList)
+    [angles, values] = convertData(sumMap, countsMap);
+    angles = [angles,angles(1)];
+    values = [values,values(1)];
     
-    for index =  1:size(angles, 2)
-         angles(index) = rightRange2(angles(index));
-     end
-    
-    angles = [angles, angles(1)];
-    rez = sumArr./countsArr;
-    rez = [rez, rez(1)];
-    polarplot(angles, rez);
-    
-end
-
-% return array of value
-% example if divisions = 6
-% return [0    0.5236    1.0472    1.5708    2.0944    2.6180    3.1416]
-function [anglesArray] = angleArray(divisions)
-    stepAngle = pi * 2 / divisions;
-    anglesArray = [];
-    for current = 0: divisions
-       newValue = current * stepAngle;
-       anglesArray = [anglesArray, newValue];
+    for i = 1: size(values,2)
+        if isnan(values(i))
+            values(i) = 0;
+        end
     end
+    
+    polarplot(angles, values);
 end
 
 function [computedAngles] = formatAngle(angleList)
@@ -55,63 +48,103 @@ function [angle] = rightRange2(value)
     end
 end
 
-function [sumArr, countsArr] = internalAverageValue(smoothingEventsMatrix, timeIndex, timeThreshold, angleList, windowSize)
+function [angles, values] = convertData(sumMap, countMap)
+    angles = [];
+    values = [];
+    mapKey = keys(sumMap);
     
-    divisionsCount = size(angleList, 2) - 1;
-    sumArr = zeros(1, divisionsCount);
-    countsArr = zeros(1, divisionsCount);
-%     
-    upd = textprogressbar((511 - windowSize)^2);  
+    for i = 1: size(mapKey,2)
+        key = mapKey(i);
+        key = key{1};
+        angles = [angles, key];
+        count = countMap(key);
+        sum = sumMap(key);
+        values = [values, sum/double(count)];
+    end
+end
+
+function [mapAngleToSum, mapAngleToCount] = internalAverageValue(smoothingEventsMatrix, timeDifferenceThreshold, timeThreshold, windowSize)
+    
+    mapAngleToSum = containers.Map('KeyType','double', 'ValueType','double');
+    mapAngleToCount = containers.Map('KeyType','double', 'ValueType','int8');
+
+    
+    matrixSizeX = size(smoothingEventsMatrix, 1);
+    matrixSizeY = size(smoothingEventsMatrix, 2);
+%   
+    upd = textprogressbar((matrixSizeX  - windowSize)^2);
 % 
-    for x = windowSize + 1: 511 - windowSize
-        for y = windowSize + 1: 511 - windowSize
-            if pointsInPlurality([x,y], smoothingEventsMatrix(:, :, timeIndex)) 
-                [tmpSumArr, tmpCountArr] = neighboringSpeedDistrib(x, y, smoothingEventsMatrix(:, :, timeIndex), timeThreshold, divisionsCount, windowSize);
-                sumArr = sumArr + tmpSumArr;
-                countsArr = countsArr + tmpCountArr;
-%             
-                upd(x*y)
+    for x = windowSize + 1: matrixSizeX  - windowSize
+        for y = windowSize + 1: matrixSizeY  - windowSize
+            if (pointsInSet([x,y], smoothingEventsMatrix) && smoothingEventsMatrix(x, y) >= timeThreshold)
+                [tmpMapAngleToSum, tmpMapAngleToCount] = neighboringSpeedDistrib(x, y, smoothingEventsMatrix, timeDifferenceThreshold, timeThreshold, windowSize);
+                mapAngleToSum = addValuesToMap(mapAngleToSum, tmpMapAngleToSum);
+                mapAngleToCount = addValuesToMap(mapAngleToCount, tmpMapAngleToCount);
             end
+            upd(x*y) 
         end
     end
     
 end
 
 
+function [map] = addValuesToMap(map, tmpMap)
+    tmpKeys = keys(tmpMap);
+    for keyIndex = 1 : size(tmpKeys, 2)
+        key = tmpKeys(keyIndex);
+        key = key{1};
+        if (isKey(map, key))
+            map(key) = tmpMap(key) + map(key);
+        else
+            map(key) = tmpMap(key);
+        end
+    end
+end
 
-function [sumArr, countsArr] = neighboringSpeedDistrib(x, y, matrix, timeThreshold, divisionsCount, windowSize)
-    %In each value is contained sum of values that contain in [pi*index,
-    %pi* (index + 1)
-    sumArr = zeros(1, divisionsCount);
-    %in each value
-    countsArr = zeros(1, divisionsCount);
+function [mapAngleToSum, mapAngleToCount] = neighboringSpeedDistrib(x, y, matrix, timeDifferenceThreshold, timeThreshold, windowSize)
+    mapAngleToSum = containers.Map('KeyType','double', 'ValueType','double');
+    mapAngleToCount = containers.Map('KeyType','double', 'ValueType','int8');
     
     for shiftX = -windowSize : windowSize
         for shiftY = -windowSize : windowSize
             offsetX = x + shiftX;
             offsetY = y + shiftY;
             
-            if (pointsInPlurality([offsetX, offsetY], matrix) && (offsetX ~= x || offsetY ~= y))
+            [theta, rho] = cart2pol(shiftY, -shiftX);
+            theta = rightRange(theta);
+            if ~isKey(mapAngleToSum, theta)
+                mapAngleToSum(theta) = 0;
+                mapAngleToCount(theta) = 0;
+            end
+            if (pointsInSet([offsetX, offsetY], matrix) && (offsetX ~= x || offsetY ~= y) && matrix(offsetX, offsetY) >= timeThreshold) 
                 currentDistance = euclidean_distance(x, y, offsetX, offsetY);
                 currentTimeDifference = matrix(offsetX, offsetY) - matrix(x,y);
 
-                if (currentTimeDifference > 0 && currentDistance)
+                if ((currentTimeDifference > 0) && (currentTimeDifference >  timeDifferenceThreshold) && currentDistance)
                     currentSpeed = currentDistance / currentTimeDifference;
                     
-                    %determine the angle 
-                    [theta, rho] = cart2pol(shiftX, shiftY);
-                    theta = rightRange(theta);
+                    % determine the angle
                     
-                    indexInArray = indexByAngle(theta, divisionsCount);
-                    sumArr(1, indexInArray) = sumArr(1, indexInArray) + currentSpeed;
-                    countsArr(1, indexInArray) = countsArr(1, indexInArray) + 1;
+                    [theta, rho] = cart2pol(shiftY, -shiftX);
+                    theta = rightRange(theta);
+                        
+%                     indexInArray = indexByAngle(theta, divisionsCount);
+%                     sumArr(1, indexInArray) = sumArr(1, indexInArray) + currentSpeed;
+%                     countsArr(1, indexInArray) = countsArr(1, indexInArray) + 1;
+                    if isKey(mapAngleToSum, theta)
+                        mapAngleToSum(theta) = mapAngleToSum(theta) + currentSpeed;
+                        mapAngleToCount(theta) = mapAngleToCount(theta) + 1;
+                    else
+                        mapAngleToSum(theta) = currentSpeed;
+                        mapAngleToCount(theta) = 1;
+                    end
                 end
             end
         end
     end
 end
     
-function [inPlurality] = pointsInPlurality(point, plurality) 
+function [inPlurality] = pointsInSet(point, plurality) 
     x = point(1);
     y = point(2);
 %     z = point(3);
@@ -123,13 +156,3 @@ function [inPlurality] = pointsInPlurality(point, plurality)
 end
 
 % The function returns
-function [foundedIndex] = indexByAngle(theta, divisionsCount)
-    angleArr = angleArray(divisionsCount);
-    
-    for index = 2 : size(angleArr, 2)
-        if (angleArr(index - 1) <= theta) && (theta < angleArr(index))
-            foundedIndex = index - 1;
-            return;
-        end
-    end
-end

@@ -1,12 +1,13 @@
 % The function calculate eventsMatrir without noizes (threshold is used for each pixel in each moment of time)
 % Second version of main.m
 
-function [dataMtr] = main2(dataPath, baseLinePath, calculatePath)
+function [dataMtr] = main2(dataPath, baseLinePath, calculatePath, strict)
     
     if nargin < 3
         dataPath = "data";
         baseLinePath = "data";
         calculatePath = "calculate";
+        strict = false;
     end
 
     % "data/points.mat"
@@ -31,7 +32,7 @@ function [dataMtr] = main2(dataPath, baseLinePath, calculatePath)
     % ___________ |||||| ___________
     
     dataMtr = smothingEventsMatrix(dataMtr, noiseMtr, intensityData);
-    dataMtr = reverseEvents(dataMtr);
+    dataMtr = reverseEvents(dataMtr, strict);
 %     save caclulated Matrix
     save(calculatePath + "/smoothingColorEvents.mat", "dataMtr", "-v7.3");
 
