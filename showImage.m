@@ -19,6 +19,6 @@ function [] = showImage(dataMtr, name)
     handle.Visual.ColorMap.MapExpression = 'jet';
     
     if (name ~= "") 
-        imwrite(im2uint8(dataMtr),jet(256), name);
+        imwrite(im2uint8(dataMtr), jet(256), name);
     end
 end

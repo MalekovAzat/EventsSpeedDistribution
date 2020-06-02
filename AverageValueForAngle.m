@@ -7,13 +7,9 @@
 % windowSize - the value contain size of sliding window that is used for speed calculations.
 % 
 function[angleList, averageSpeedList] = AverageValueForAngle(smoothingEventsMatrix, time, timeDifferenceThreshold, timeThreshold, windowSize)
-    if (time == -1) 
-        [sumMap, countsMap] = internalAverageValue(smoothingEventsMatrix, timeDifferenceThreshold, timeThreshold, windowSize);
-    else
-        [sumMap, countsMap] = internalAverageValue(smoothingEventsMatrix(:,:,time), timeDifferenceThreshold, timeThreshold, windowSize);
-    end
-    
-    [angles, values] = convertData(sumMap, countsMap);
+    [sumMap, counts, test] = internalAverageValue(smoothingEventsMatrix, timeDifferenceThreshold, timeThreshold, windowSize);
+
+    [angles, values] = convertData(sumMap, counts);
     angles = [angles,angles(1)];
     values = [values,values(1)];
     
@@ -22,15 +18,17 @@ function[angleList, averageSpeedList] = AverageValueForAngle(smoothingEventsMatr
             values(i) = 0;
         end
     end
-    
+    h1  = figure('Name', sprintf('time %f', time));
     polarplot(angles, values);
-end
-
-function [computedAngles] = formatAngle(angleList)
-    computedAngles = zeros(1, size(angleList, 2) - 1);
-    for index = 1: size(angleList, 2) - 1
-        computedAngles(index) = (angleList(index) + angleList(index + 1)) / 2;
-    end
+    
+    handle = implay(test);
+    set(handle.Parent, 'Name', sprintf('time %f', time))
+    cmap = jet(256);
+    handle.Visual.ColorMap.Map = cmap;
+    handle.Visual.ColorMap.UserRangeMin = 0;
+    handle.Visual.ColorMap.UserRangeMax = 1;
+    handle.Visual.ColorMap.UserRange = 1;
+    handle.Visual.ColorMap.MapExpression = 'jet';
 end
 
 %change range from [-pi,pi] to [0,pi]
@@ -48,7 +46,7 @@ function [angle] = rightRange2(value)
     end
 end
 
-function [angles, values] = convertData(sumMap, countMap)
+function [angles, values] = convertData(sumMap, count)
     angles = [];
     values = [];
     mapKey = keys(sumMap);
@@ -57,36 +55,37 @@ function [angles, values] = convertData(sumMap, countMap)
         key = mapKey(i);
         key = key{1};
         angles = [angles, key];
-        count = countMap(key);
+        
         sum = sumMap(key);
         values = [values, sum/double(count)];
     end
 end
 
-function [mapAngleToSum, mapAngleToCount] = internalAverageValue(smoothingEventsMatrix, timeDifferenceThreshold, timeThreshold, windowSize)
+function [mapAngleToSum, count, testMatrix] = internalAverageValue(smoothingEventsMatrix,timeDifferenceThreshold, timeThreshold, windowSize)
     
     mapAngleToSum = containers.Map('KeyType','double', 'ValueType','double');
-    mapAngleToCount = containers.Map('KeyType','double', 'ValueType','int8');
+    count = 0;
 
-    
     matrixSizeX = size(smoothingEventsMatrix, 1);
     matrixSizeY = size(smoothingEventsMatrix, 2);
+    testMatrix = zeros(matrixSizeX, matrixSizeY);
 %   
     upd = textprogressbar((matrixSizeX  - windowSize)^2);
 % 
     for x = windowSize + 1: matrixSizeX  - windowSize
         for y = windowSize + 1: matrixSizeY  - windowSize
-            if (pointsInSet([x,y], smoothingEventsMatrix) && smoothingEventsMatrix(x, y) >= timeThreshold)
-                [tmpMapAngleToSum, tmpMapAngleToCount] = neighboringSpeedDistrib(x, y, smoothingEventsMatrix, timeDifferenceThreshold, timeThreshold, windowSize);
+            invValue = filterValue(smoothingEventsMatrix(x, y));
+            if (pointsInSet([x,y], smoothingEventsMatrix) && invValue >= timeThreshold)
+                testMatrix(x, y) = invValue;
+                [tmpMapAngleToSum, tmpCount] = neighboringSpeedDistrib(x, y, smoothingEventsMatrix,timeDifferenceThreshold, timeThreshold, windowSize);
                 mapAngleToSum = addValuesToMap(mapAngleToSum, tmpMapAngleToSum);
-                mapAngleToCount = addValuesToMap(mapAngleToCount, tmpMapAngleToCount);
+                count = tmpCount + count;
             end
             upd(x*y) 
         end
     end
     
 end
-
 
 function [map] = addValuesToMap(map, tmpMap)
     tmpKeys = keys(tmpMap);
@@ -101,9 +100,9 @@ function [map] = addValuesToMap(map, tmpMap)
     end
 end
 
-function [mapAngleToSum, mapAngleToCount] = neighboringSpeedDistrib(x, y, matrix, timeDifferenceThreshold, timeThreshold, windowSize)
+function [mapAngleToSum, count] = neighboringSpeedDistrib(x, y, matrix, timeDifferenceThreshold, timeThreshold, windowSize)
     mapAngleToSum = containers.Map('KeyType','double', 'ValueType','double');
-    mapAngleToCount = containers.Map('KeyType','double', 'ValueType','int8');
+    count = 0;
     
     for shiftX = -windowSize : windowSize
         for shiftY = -windowSize : windowSize
@@ -112,32 +111,30 @@ function [mapAngleToSum, mapAngleToCount] = neighboringSpeedDistrib(x, y, matrix
             
             [theta, rho] = cart2pol(shiftY, -shiftX);
             theta = rightRange(theta);
+            
             if ~isKey(mapAngleToSum, theta)
                 mapAngleToSum(theta) = 0;
-                mapAngleToCount(theta) = 0;
             end
-            if (pointsInSet([offsetX, offsetY], matrix) && (offsetX ~= x || offsetY ~= y) && matrix(offsetX, offsetY) >= timeThreshold) 
+            
+            invValue = filterValue(matrix(offsetX, offsetY));
+
+            if (pointsInSet([offsetX, offsetY], matrix) && (offsetX ~= x || offsetY ~= y) && invValue >= timeThreshold) 
                 currentDistance = euclidean_distance(x, y, offsetX, offsetY);
-                currentTimeDifference = matrix(offsetX, offsetY) - matrix(x,y);
+                
+                currentTimeDifference = matrix(x,y) - matrix(offsetX, offsetY);
 
                 if ((currentTimeDifference > 0) && (currentTimeDifference >  timeDifferenceThreshold) && currentDistance)
+                    
                     currentSpeed = currentDistance / currentTimeDifference;
-                    
-                    % determine the angle
-                    
                     [theta, rho] = cart2pol(shiftY, -shiftX);
                     theta = rightRange(theta);
-                        
-%                     indexInArray = indexByAngle(theta, divisionsCount);
-%                     sumArr(1, indexInArray) = sumArr(1, indexInArray) + currentSpeed;
-%                     countsArr(1, indexInArray) = countsArr(1, indexInArray) + 1;
+
                     if isKey(mapAngleToSum, theta)
                         mapAngleToSum(theta) = mapAngleToSum(theta) + currentSpeed;
-                        mapAngleToCount(theta) = mapAngleToCount(theta) + 1;
                     else
                         mapAngleToSum(theta) = currentSpeed;
-                        mapAngleToCount(theta) = 1;
                     end
+                    count = count + 1;
                 end
             end
         end
@@ -155,4 +152,12 @@ function [inPlurality] = pointsInSet(point, plurality)
     inPlurality = false;
 end
 
-% The function returns
+
+function [filterValue] = filterValue(val)
+    if val ~= 0 
+        filterValue = 1/val;
+    else
+        filterValue = 0;
+    end
+
+end

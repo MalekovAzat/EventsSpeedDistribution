@@ -1,13 +1,14 @@
 % The function calculate eventsMatrir without noizes (threshold is used for each pixel in each moment of time)
 % Second version of main.m
 
-function [dataMtr] = main2(dataPath, baseLinePath, calculatePath, strict)
+function [eventsLiveMatrix, reversedEventsLiveMatrix] = main2(dataPath, baseLinePath, calculatePath, strict, timeIndex)
     
     if nargin < 3
         dataPath = "data";
         baseLinePath = "data";
         calculatePath = "calculate";
         strict = false;
+        timeIndex = -1;
     end
 
     % "data/points.mat"
@@ -24,18 +25,23 @@ function [dataMtr] = main2(dataPath, baseLinePath, calculatePath, strict)
     
     noiseMtr = matfile(dataPath + "/f_noise_sigma.mat");
     noiseMtr = noiseMtr.f_noise_sigma;
-    
-    
+
 %     cutOffNoiseMtr = cutOffNoise(dataMtr, noiseMtr, intensityData);
 %     save(calculatePath + "cutOffNoseMtr.mat", "cutOffNoseMtr", "-v7.3");
 
     % ___________ |||||| ___________
-    
-    dataMtr = smothingEventsMatrix(dataMtr, noiseMtr, intensityData);
-    dataMtr = reverseEvents(dataMtr, strict);
+    eventsLiveMatrix = smothingEventsMatrix(dataMtr, noiseMtr, intensityData);
+    reversedEventsLiveMatrix = reverseEvents(eventsLiveMatrix, strict);
 %     save caclulated Matrix
-    save(calculatePath + "/smoothingColorEvents.mat", "dataMtr", "-v7.3");
+    save(calculatePath + "/eventsLiveMatrix.mat", "eventsLiveMatrix", "-v7.3");
+    save(calculatePath + "/reversedEventsLiveMatrix.mat", "reversedEventsLiveMatrix", "-v7.3");
 
+    if (timeIndex == -1)
+        return
+    else
+        eventsLiveMatrix = eventsLiveMatrix(:, :, timeIndex);
+        reversedEventsLiveMatrix = reversedEventsLiveMatrix(:, :, timeIndex);
+    end
     % timeMoment = 120;
     % timeThreshold = 0.01;
     

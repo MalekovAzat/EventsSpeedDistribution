@@ -9,7 +9,6 @@ for t = 1:1500
             if strictFilter
                 if mtr(x,y,t) > 1
                     mtr(x,y,t) = 1/mtr(x,y,t);
-                    
                 elseif ((mtr(x,y,t) < 1) && (mtr(x,y,t) > 0))
                     mtr(x,y,t) = 1;
                 end
