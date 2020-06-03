@@ -15,6 +15,15 @@ function [] = AngleAndSpeedMovie(matrix, start, stop)
         imwrite(im2uint8(angles./(2*pi)), huemap, sprintf('AnglesImages/AnglesForFrame_%.0f.png', timeIndex + start - 1));
         
         imwrite(im2uint8(speeds./max(speeds(:))), jet(256), sprintf('SpeedImages/SpeedForFrame_%.0f.png', timeIndex + start - 1));
+        
+        fig = figure("visible", "Off");
+        vectorForAngle = FilterForRozeByAngle(angles);
+        h = polarhistogram(vectorForAngle, 150);
+        save_fig(fig, sprintf("Roses/RoseForFrame_%.0f.png", timeIndex),[0,0,10,7]);
 
+        [speedForSpeedHist, anglesForSpeedHist] = CreateDataForSpeedHistogram(speeds, angles, 150);
+
+        h  = polarplot(anglesForSpeedHist, speedForSpeedHist);
+        save_fig(fig, sprintf("SpeedRoses/SpeedRoseForFrame_%.0f.png", timeIndex),[0,0,10,7]);
     end
 end
