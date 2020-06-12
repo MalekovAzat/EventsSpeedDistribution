@@ -1,34 +1,69 @@
 %The function calculate vector that contain speed distribution for sliding
 %window.
 
-function [speedDistrib] = speedDistribution(pixelMatrix, timeIndex, timeThreshold)
+function [speedDistrib] = speedDistribution(pixelMatrix, timeThreshold, intencityTrashold, windowSize)
     % speedDistrib = create3Dmatrix(512,512,8);
-    speedDistrib = [];
-    upd = textprogressbar(512*512);
 
-    for x  = 2:511
-        for y = 2:511
-            neighboringSpeed = neighboringSpeedDistrib(x, y, pixelMatrix(:, :, timeIndex), timeThreshold);
-            speedDistrib = [speedDistrib, neighboringSpeed];
-            upd((x+1)*(y+1));
-        end
+    if nargin < 2
+        timeThreshold = 1;
+        intencityTrashold = 0.7;
+        windowSize = 8;
     end
-    countMedAverDispes(speedDistrib);
-end
 
-function [speedDistribArr] = neighboringSpeedDistrib(x, y, pixelMatrix, timeThreshold)
-    speedDistribArr = [];
-    for xOffset = -1:1
-        for yOffset = -1:1
-            distance = euclidean_distance(x, y, x + xOffset, y + yOffset);
-            timeDifference = timeDiff(x, y, x+xOffset, y+yOffset, pixelMatrix);
-            if distance ~= 0 & pixelMatrix(x,y) <= 3
-                if timeDifference > timeThreshold
-                    addSpeed = distance / timeDifference;
-                    speedDistribArr = [speedDistribArr, addSpeed];
+    speedDistrib = [];
+
+    sizeX = size(pixelMatrix, 1);
+    sizeY = size(pixelMatrix, 2);
+    
+    for x = windowSize + 1: sizeX - windowSize
+        for y = windowSize + 1: sizeY - windowSize
+            inversedValue = filterValue(pixelMatrix(x,y));
+
+            if (inversedValue > intencityTrashold)
+                neighboringSpeed = neighboringSpeedDistrib(x, y, pixelMatrix, timeThreshold, intencityTrashold, windowSize);
+                if neighboringSpeed ~= 0
+                    speedDistrib = [speedDistrib, neighboringSpeed];
                 end
             end
         end
+    end
+    % countMedAverDispes(speedDistrib);
+end
+
+function [averSpeed] = neighboringSpeedDistrib(x, y, pixelMatrix, timeThreshold, intencityTrashold, windowSize)
+    tmpVectorsCount = 0;
+
+    xOrd = 0;
+    yOrd = 0;
+
+    for shiftX = -windowSize: windowSize
+        for shiftY = -windowSize: windowSize
+            offsetX = x + shiftX;
+            offsetY = y + shiftY;
+            
+            timeDifference = pixelMatrix(x, y) - pixelMatrix(offsetX, offsetY);
+            inversedValue = filterValue(pixelMatrix(offsetX, offsetY));
+
+            if (inversedValue > intencityTrashold) && (timeDifference > timeThreshold) && (offsetX ~= x || offsetY ~=y)
+                tmpVectorsCount = tmpVectorsCount + 1;
+                [theta, rho] = cart2pol(shiftX, shiftY);
+
+                speed = rho / timeDifference;
+
+                tempX = shiftX / rho * speed;
+                tempY = shiftY / rho * speed;
+
+                xOrd = xOrd + tempX;
+                yOrd = yOrd + tempY;
+            end
+        end
+    end
+
+    [theta, rho] = cart2pol(xOrd, yOrd);
+    averSpeed = rho./tmpVectorsCount;
+
+    if isnan(averSpeed)
+        averSpeed = 0;
     end
 end
 
@@ -37,9 +72,6 @@ function [timeDist] = timeDiff(x1, y1, x2, y2, pixelMatrix)
 end
 
 function [distrib] = countMedAverDispes(speedDistrib)
-    len = length(speedDistrib);
-    speedDistrib = sort(speedDistrib);
-    newValues = [];
 
     med = median(speedDistrib);
     matExp = mean(speedDistrib);

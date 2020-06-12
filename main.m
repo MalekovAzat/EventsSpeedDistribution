@@ -7,12 +7,12 @@
 % each moment (without any trashhold and filters).
 function [dataMatrix_1] = main(dataPath, calculationsPath)
 %     fileName = "data/points.mat";
-    data = matfile(dataPath);
+    data = matfile(dataPath + "/points.mat");
     data = data.points;
     
-    dataMatrix = zeros(sizeX,sizeY,sizeZ);
+    dataMatrix = zeros(512, 512, 1500);
     
-    dataMatrix = fillingDataMtr(data, dataMatrix);
+    dataMatrix = fillMtr(dataMatrix, data);
     save(calculationsPath + "/eventsMatrix.mat", "dataMatrix", "-v7.3");
     
     dataMatrix_1 = countEventsMtr(dataMatrix);
@@ -22,28 +22,28 @@ function [dataMatrix_1] = main(dataPath, calculationsPath)
     save(calculationsPath + "/invertedEventsMatrix.mat", "dataMatrix_1","-v7.3");
 end
 
-function [dataMatrix] = fillingDataMtr(data , dataMatrix)
-    % The value contain count of cells in data object
-    cellCount = size(data,1);
+% function [dataMatrix] = fillingDataMtr(data , dataMatrix)
+%     % The value contain count of cells in data object
+%     cellCount = size(data,1);
     
-    for currentIndex  = 1:cellCount
-        % Get the data from current cell
-        tmpData = (data(currentIndex));
-        dataMatrix = fillMtr(tmpData, dataMatrix);
-    end
-end
+%     for currentIndex  = 1 : cellCount
+%         % Get the data from current cell
+%         tmpData = (data(currentIndex));
+%         dataMatrix = fillMtr(tmpData, dataMatrix);
+%     end
+% end
 
-%The function sets cell in matrix to 1 if the event contain in array.
-function [mtr] = fillMtr(arr, mtr)
-    %Get count of points in current cell
-    pointsCount = size(arr,1);
-    for currIndex = 1:pointsCount
-        timeIndex = arr(currIndex,3);
-        x = arr(currIndex,1);
-        y = arr(currIndex,2);
-        mtr(x , y, timeIndex) = 1;
-    end
-end
+% %The function sets cell in matrix to 1 if the event contain in array.
+% function [mtr] = fillMtr(arr, mtr)
+%     %Get count of points in current cell
+%     pointsCount = size(arr,1);
+%     for currIndex = 1:pointsCount
+%         timeIndex = arr(currIndex, 3);
+%         x = arr(currIndex,1);
+%         y = arr(currIndex,2);
+%         mtr(x , y, timeIndex) = 1;
+%     end
+% end
 
 % The function calculate live time for each pixel by previous value
 function [newMtr] = countEventsMtr(mtrSimple)
@@ -72,9 +72,9 @@ end
 % The function changes value from X to 1/X for each pixel in each time 
 % (without any trashold and smooth)
 function [mtr] = reverseEvents(mtr)
-    countT = size(mtrSimple,3);
-    countX = size(mtrSimple,1);
-    countY = size(mtrSimple,2);
+    countT = size(mtr,3);
+    countX = size(mtr,1);
+    countY = size(mtr,2);
     
     for t = 1:countT
         for x = 1:countX

@@ -2,3 +2,4 @@
 function saveFilteredImage(matrix, treshold)
     resMatrix = filteredMatrix(matrix, treshold);
     showImage(resMatrix, sprintf('calculatedPictures/fulteredImage_%.1f.png', treshold));
+end
